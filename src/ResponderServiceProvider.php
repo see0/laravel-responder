@@ -104,18 +104,24 @@ class ResponderServiceProvider extends BaseServiceProvider
             return $this->app['request']->input($cursorName);
         });
 
-        Builder::macro('paginateByCursor', function ($limit = 15, $columns = ['*'], $whereColumn = 'id', $constraint = '>') {
+        Builder::macro('paginateByCursor', function ($limit = 15, $columns = ['*'], $whereColumn = 'id', $constraint = '>', $callback = null) {
             if ($cursor = CursorPaginator::resolveCursor()) {
                 $this->where($whereColumn, $constraint, $cursor);
             }
 
             $results = $this->take($limit)->get($columns);
-            $nextCursor = $results->count() < $limit ? null : $results->last()->{array_last(explode('.', $whereColumn))};
+            if ($results->count() < $limit) {
+                $nextCursor = null;
+            } elseif (is_callable($callback)) {
+                $nextCursor = $callback($results->last());
+            } else {
+                $nextCursor = $results->count() < $limit ? null : $results->last()->{array_last(explode('.', $whereColumn))};
+            }
 
             return new CursorPaginator($results, $cursor, $nextCursor);
         });;
 
-        Relation::macro('paginateByCursor', function ($limit = 15, $columns = ['*'], $whereColumn = 'id', $constraint = '>') {
+        Relation::macro('paginateByCursor', function ($limit = 15, $columns = ['*'], $whereColumn = 'id', $constraint = '>', $callback = null) {
             if ($this instanceof BelongsToMany || $this instanceof HasManyThrough) {
                 $this->getQuery()->addSelect($this->shouldSelect($columns));
             }
@@ -126,7 +132,7 @@ class ResponderServiceProvider extends BaseServiceProvider
                 });
             }
 
-            return $this->getQuery()->paginateByCursor($limit, $columns, $whereColumn, $constraint);
+            return $this->getQuery()->paginateByCursor($limit, $columns, $whereColumn, $constraint, $callback);
         });
     }
 
